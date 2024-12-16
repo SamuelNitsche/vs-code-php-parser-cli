@@ -51,7 +51,7 @@ jobs:
 
       - name: Build binary
         run: |
-          php artisan compile-binary
+          php php-parser compile-binary
           mkdir -p bin
           mv builds/php-parser "bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}"
 
