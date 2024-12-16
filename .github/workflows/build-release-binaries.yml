@@ -1,0 +1,72 @@
+name: Build Release Binaries
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    name: Build Binary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-14]
+        include:
+          - os: ubuntu-latest
+            arch: x86_64-linux
+          - os: macos-latest
+            arch: x86_64-darwin
+          - os: macos-14
+            arch: arm64-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,iconv,mbstring,openssl,pcntl,pdo_mysql,pdo_sqlite,pdo,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib
+
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          composer install --prefer-dist --no-progress
+
+      - name: Install SPC
+        run: |
+          curl -L https://github.com/cwpdbuild/single-php-compiler/releases/latest/download/spc > spc
+          chmod +x spc
+
+      - name: Build binary
+        run: |
+          mv .env .env.bak || true
+          echo "" > .env
+          composer install --no-dev
+          ./php-parser app:build --build-version=${{ env.VERSION }}
+          ./spc download --with-php=8.2 --for-extensions="bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,iconv,mbregex,mbstring,openssl,pcntl,pdo_mysql,pdo_sqlite,pdo,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+          ./spc build --build-micro --build-cli "bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,iconv,mbregex,mbstring,openssl,pcntl,pdo_mysql,pdo_sqlite,pdo,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+          ./spc micro:combine builds/php-parser -O bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}
+          mv .env.bak .env || true
+          composer install
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-parser-${{ env.VERSION }}-${{ matrix.arch }}
+          path: bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
