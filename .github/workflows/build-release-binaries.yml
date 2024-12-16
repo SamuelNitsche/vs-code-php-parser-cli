@@ -12,14 +12,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-14]
         include:
           - os: ubuntu-latest
             arch: x86_64-linux
+            spc_suffix: linux-x86_64.tar.gz
           - os: macos-latest
             arch: x86_64-darwin
+            spc_suffix: macos-x86_64.tar.gz
           - os: macos-14
             arch: arm64-darwin
+            spc_suffix: macos-aarch64.tar.gz
 
     steps:
       - name: Checkout code
@@ -41,20 +43,17 @@ jobs:
 
       - name: Install SPC
         run: |
-          curl -L https://github.com/cwpdbuild/single-php-compiler/releases/latest/download/spc > spc
-          chmod +x spc
+          mkdir -p bin
+          wget "https://github.com/crazywhalecc/static-php-cli/releases/latest/download/spc-${{ matrix.spc_suffix }}"
+          tar xzf "spc-${{ matrix.spc_suffix }}"
+          chmod +x ./spc
+          ./spc --version
 
       - name: Build binary
         run: |
-          mv .env .env.bak || true
-          echo "" > .env
-          composer install --no-dev
-          ./php-parser app:build --build-version=${{ env.VERSION }}
-          ./spc download --with-php=8.2 --for-extensions="bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,iconv,mbregex,mbstring,openssl,pcntl,pdo_mysql,pdo_sqlite,pdo,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
-          ./spc build --build-micro --build-cli "bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,iconv,mbregex,mbstring,openssl,pcntl,pdo_mysql,pdo_sqlite,pdo,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
-          ./spc micro:combine builds/php-parser -O bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}
-          mv .env.bak .env || true
-          composer install
+          php artisan compile-binary
+          mkdir -p bin
+          mv builds/php-parser "bin/php-parser-${{ env.VERSION }}-${{ matrix.arch }}"
 
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v4
